@@ -61,7 +61,7 @@ const GameComponent: React.FC<GameComponentProps> = ({ playerName, roomId, onExi
 
     // Listen for player death event
     const handlePlayerDeath = () => {
-      console.log("íë ì´ì´ ì¬ë§ ì´ë²¤í¸ ê°ì§: UI íì");
+      console.log("Ã­ÂÂÃ«Â ÂÃ¬ÂÂ´Ã¬ÂÂ´ Ã¬ÂÂ¬Ã«Â§Â Ã¬ÂÂ´Ã«Â²Â¤Ã­ÂÂ¸ ÃªÂ°ÂÃ¬Â§Â: UI Ã­ÂÂÃ¬ÂÂ");
       setIsPlayerDead(true);
     };
 
@@ -140,13 +140,13 @@ const GameComponent: React.FC<GameComponentProps> = ({ playerName, roomId, onExi
     
     const myPlayerState = allPlayers.find(player => player.account === server.account);
     if (myPlayerState) {
-      // isDead íëê·¸ ëë health ê°ì¼ë¡ ì¬ë§ ìí íì¸
+      // isDead Ã­ÂÂÃ«ÂÂÃªÂ·Â¸ Ã«ÂÂÃ«ÂÂ health ÃªÂ°ÂÃ¬ÂÂ¼Ã«Â¡Â Ã¬ÂÂ¬Ã«Â§Â Ã¬ÂÂÃ­ÂÂ Ã­ÂÂÃ¬ÂÂ¸
       if ((myPlayerState.isDead === true) || (myPlayerState.health !== undefined && myPlayerState.health <= 0)) {
-        console.log("íë ì´ì´ ìíê° ì¬ë§ì¼ë¡ ê°ì§ë¨: UI íì");
+        console.log("Ã­ÂÂÃ«Â ÂÃ¬ÂÂ´Ã¬ÂÂ´ Ã¬ÂÂÃ­ÂÂÃªÂ°Â Ã¬ÂÂ¬Ã«Â§ÂÃ¬ÂÂ¼Ã«Â¡Â ÃªÂ°ÂÃ¬Â§ÂÃ«ÂÂ¨: UI Ã­ÂÂÃ¬ÂÂ");
         setIsPlayerDead(true);
       } else if (myPlayerState.health > 0 && myPlayerState.isRespawned) {
-        // ë¦¬ì¤í° ëì ë ì¬ë§ UI ì ê±°
-        console.log("íë ì´ì´ê° ë¦¬ì¤í°ë¨: ì¬ë§ UI ì ê±°");
+        // Ã«Â¦Â¬Ã¬ÂÂ¤Ã­ÂÂ° Ã«ÂÂÃ¬ÂÂ Ã«ÂÂ Ã¬ÂÂ¬Ã«Â§Â UI Ã¬Â ÂÃªÂ±Â°
+        console.log("Ã­ÂÂÃ«Â ÂÃ¬ÂÂ´Ã¬ÂÂ´ÃªÂ°Â Ã«Â¦Â¬Ã¬ÂÂ¤Ã­ÂÂ°Ã«ÂÂ¨: Ã¬ÂÂ¬Ã«Â§Â UI Ã¬Â ÂÃªÂ±Â°");
         setIsPlayerDead(false);
       }
     }
@@ -156,7 +156,7 @@ const GameComponent: React.FC<GameComponentProps> = ({ playerName, roomId, onExi
   const handleRespawn = () => {
     if (!gameSceneRef.current || !server) return;
     
-    console.log("ë¦¬ì¤í° ë²í¼ í´ë¦­: ë¦¬ì¤í° ì²ë¦¬ ìì");
+    console.log("Ã«Â¦Â¬Ã¬ÂÂ¤Ã­ÂÂ° Ã«Â²ÂÃ­ÂÂ¼ Ã­ÂÂ´Ã«Â¦Â­: Ã«Â¦Â¬Ã¬ÂÂ¤Ã­ÂÂ° Ã¬Â²ÂÃ«Â¦Â¬ Ã¬ÂÂÃ¬ÂÂ");
     
     // Generate random position within map boundaries
     const randomX = Math.floor(Math.random() * 1800) + 100; // 100 to 1900
@@ -171,7 +171,7 @@ const GameComponent: React.FC<GameComponentProps> = ({ playerName, roomId, onExi
     // Hide respawn button
     setIsPlayerDead(false);
     
-    console.log("ë¦¬ì¤í° ì²ë¦¬ ìë£");
+    console.log("Ã«Â¦Â¬Ã¬ÂÂ¤Ã­ÂÂ° Ã¬Â²ÂÃ«Â¦Â¬ Ã¬ÂÂÃ«Â£Â");
   };
 
   return (

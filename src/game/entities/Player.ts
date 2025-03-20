@@ -295,9 +295,9 @@ export class Player {
     
     // Emit event for UI updates
     this.scene.events.emit("updateHealth", this.health);
-
-    this.scene.cameras.main.shake(100, 0.01);
-
+    
+    // Visual feedback - 카메라 흔들림 효과 제거 (로컬 플레이어만 GameScene에서 처리)
+    
     // Store original tint
     const originalTint = this.colorTint;
     

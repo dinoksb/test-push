@@ -9,8 +9,6 @@ export class GameScene extends Phaser.Scene {
   private otherPlayers: Map<string, Player> = new Map();
   private projectiles: Map<string, Phaser.Physics.Arcade.Sprite> = new Map();
   private powerups: Phaser.Physics.Arcade.Group | null = null;
-  private attackHitbox: Phaser.GameObjects.Rectangle | null = null;
-  private hitPlayers: Set<string> = new Set(); // Track which players have been hit by current attack
   
   // Map elements
   private map!: Phaser.Tilemaps.Tilemap;
@@ -123,7 +121,7 @@ export class GameScene extends Phaser.Scene {
     }
     
     // Add help text
-    this.add.text(16, 16, "Use arrow keys or WASD to move, SPACE to attack", {
+    this.add.text(16, 16, "Use arrow keys or WASD to move, SPACE to shoot", {
       fontSize: "18px",
       color: "#ffffff",
       backgroundColor: "#000000",
@@ -212,22 +210,22 @@ export class GameScene extends Phaser.Scene {
       }
     });
 
-    // ì¶ê°: íë ì´ì´ ì£½ì ì´ë²¤í¸ êµ¬ë
+    // 추가: 플레이어가 죽은 이벤트 구독
     this.server.onRoomMessage(this.roomId, "playerDied", (data: any) => {
       const { playerId } = data;
       
-      // ë´ ìºë¦­í°ê° ì£½ìì ëë§ ì²ë¦¬
+      // 내 캐릭터가 죽었을 때만 처리
       if (playerId === this.myAccount) {
-        // ì£½ì ì´ë²¤í¸ ë°ì ë° UI íì
+        // 죽은 이벤트 받음, UI 표시
         window.dispatchEvent(new CustomEvent('player-died'));
         
-        // deadPlayers ì¸í¸ì ì¶ê°
+        // deadPlayers 세트에 추가
         this.deadPlayers.add(playerId);
       } else if (this.otherPlayers.has(playerId)) {
-        // ë¤ë¥¸ íë ì´ì´ê° ì£½ìì ê²½ì° deadPlayers ì¸í¸ì ì¶ê°
+        // 다른 플레이어가 죽었을 경우 deadPlayers 세트에 추가
         this.deadPlayers.add(playerId);
         
-        // ë¤ë¥¸ íë ì´ì´ì ìºë¦­í° í¬ëªí ì²ë¦¬
+        // 다른 플레이어의 캐릭터 투명화 처리
         const player = this.otherPlayers.get(playerId);
         if (player) {
           player.setHealth(0);
@@ -251,30 +249,6 @@ export class GameScene extends Phaser.Scene {
       if (this.spaceKey && Phaser.Input.Keyboard.JustDown(this.spaceKey) && !this.attackCooldown) {
         this.handleSpacebarAttack();
       }
-      
-      // Check for hitbox collisions with other players
-      if (this.attackHitbox) {
-        this.otherPlayers.forEach((otherPlayer, id) => {
-          // Skip players that have already been hit by this attack
-          if (this.hitPlayers.has(id)) return;
-          
-          // Skip players that are dead
-          if (otherPlayer.isDead()) return;
-          
-          const hitboxBounds = this.attackHitbox?.getBounds();
-          const playerBounds = otherPlayer.sprite.getBounds();
-          
-          if (Phaser.Geom.Rectangle.Overlaps(hitboxBounds, playerBounds)) {
-            // Register this player as hit to prevent multiple hits from same attack
-            this.hitPlayers.add(id);
-            
-            console.log(`Hitbox collision detected with player: ${id}`);
-            
-            // Process the hit
-            this.handlePlayerHit(id, this.myAccount, "melee_attack");
-          }
-        });
-      }
     }
     
     // Update other players
@@ -290,6 +264,17 @@ export class GameScene extends Phaser.Scene {
           this.projectiles.delete(id);
         }
       }
+      
+      // Check for projectile collisions with other players
+      this.otherPlayers.forEach((otherPlayer, playerId) => {
+        if (projectile.getData("ownerId") === this.myAccount && !otherPlayer.isDead()) {
+          if (this.physics.overlap(projectile, otherPlayer.sprite)) {
+            this.handlePlayerHit(playerId, this.myAccount, id);
+            projectile.destroy();
+            this.projectiles.delete(id);
+          }
+        }
+      });
       
       // Check for projectile collisions with obstacles
       if (this.physics.overlap(projectile, this.obstacles)) {
@@ -343,6 +328,8 @@ export class GameScene extends Phaser.Scene {
     }
   }
   
+  // Create
+
   // Create border obstacles (identical on all clients)
   private createBorderObstacles() {
     // Create border walls
@@ -368,73 +355,48 @@ export class GameScene extends Phaser.Scene {
     // Play attack animation
     this.player.playAttackAnimation();
     
-    // Get player direction
+    // Get player position and direction
     const playerSprite = this.player.sprite;
     const direction = playerSprite.flipX ? -1 : 1;
     
-    // Clear hit players set for new attack
-    this.hitPlayers.clear();
+    // Calculate target position based on player direction (left/right)
+    const targetX = playerSprite.flipX ? 
+      playerSprite.x - 1000 : // Left direction
+      playerSprite.x + 1000;  // Right direction
+    const targetY = playerSprite.y; // Keep same Y position for straight line
     
-    // Create hitbox in front of player
-    this.createAttackHitbox(direction);
+    // Create a unique ID for this projectile
+    const projectileId = `projectile_${this.myAccount}_${Date.now()}`;
     
-    // Send attack data to server
-    const attackData = {
-      id: `attack_${this.myAccount}_${Date.now()}`,
+    // Create projectile on this client
+    this.createProjectile({
+      id: projectileId,
       x: playerSprite.x,
-      y: playerSprite.y,
-      direction: direction,
-      ownerId: this.myAccount,
-      ownerName: this.playerName
-    };
+      y: playerSprite.y - 10, // Adjust y position to fire from slightly above center
+      targetX: targetX,
+      targetY: targetY,
+      ownerId: this.myAccount
+    });
     
-    this.server.remoteFunction("playerAttack", [attackData]);
+    // Send projectile data to server for synchronization
+    this.server.remoteFunction("playerAttack", [
+      {
+        type: "projectile",
+        id: projectileId,
+        x: playerSprite.x,
+        y: playerSprite.y - 10,
+        targetX: targetX,
+        targetY: targetY,
+        direction: direction,
+        ownerId: this.myAccount,
+        ownerName: this.playerName
+      }
+    ]);
     
     // Reset cooldown after a short delay
     this.time.delayedCall(500, () => {
       this.attackCooldown = false;
     });
-  }
-  
-  private createAttackHitbox(direction: number) {
-    // Remove existing hitbox if any
-    if (this.attackHitbox) {
-      this.attackHitbox.destroy();
-    }
-    
-    const playerSprite = this.player.sprite;
-    const hitboxWidth = 80;
-    const hitboxHeight = 60;
-    
-    // Position hitbox in front of player based on direction
-    const hitboxX = playerSprite.x + (direction * (playerSprite.width / 2 + hitboxWidth / 2));
-    const hitboxY = playerSprite.y;
-    
-    // Create hitbox
-    this.attackHitbox = this.add.rectangle(
-      hitboxX,
-      hitboxY,
-      hitboxWidth,
-      hitboxHeight,
-      0xff0000,
-      0.3 // Semi-transparent for debugging
-    );
-    
-    // Make hitbox visible only in debug mode
-    this.attackHitbox.setVisible(false);
-    
-    // Set depth to ensure hitbox is above background
-    this.attackHitbox.setDepth(15);
-    
-    // Remove hitbox after attack animation duration
-    this.time.delayedCall(300, () => {
-      if (this.attackHitbox) {
-        this.attackHitbox.destroy();
-        this.attackHitbox = null;
-      }
-    });
-    
-    return this.attackHitbox;
   }
 
   private handleProjectileFired(data: any) {
@@ -570,6 +532,9 @@ export class GameScene extends Phaser.Scene {
       // Update our health to match server's value
       this.player.setHealth(newHealth);
       
+      // 로컬 플레이어가 맞았을 때만 카메라 흔들림 효과 적용
+      this.cameras.main.shake(100, 0.01);
+      
       // Check if player died
       if (newHealth <= 0 || isDead) {
         // Dispatch custom event for player death
@@ -643,6 +608,12 @@ export class GameScene extends Phaser.Scene {
   
   // Handle player attack message from server
   private handlePlayerAttack(data: any) {
+    // Check for type field - if it's a projectile, handle it differently
+    if (data.type === "projectile") {
+      this.handleProjectileFired(data);
+      return;
+    }
+    
     const { ownerId, x, y, direction, forceRemoveFromDeadPlayers } = data;
     
     // Check if we need to force remove from deadPlayers set
@@ -682,7 +653,7 @@ export class GameScene extends Phaser.Scene {
     
     console.log(`Player respawned: ${playerId}, forceRemoveFromDeadPlayers: ${forceRemoveFromDeadPlayers}`);
     
-    // ë´ ìºë¦­í°ì¸ ê²½ì° ì²ë¦¬íì§ ìì (ë¡ì»¬ìì ì´ë¯¸ ì²ë¦¬ë¨)
+    // 내 캐릭터인 경우 처리하지 않음 (로컬에서 이미 처리됨)
     if (playerId === this.myAccount) return;
     
     // Force remove from deadPlayers set if flag is present
@@ -757,15 +728,15 @@ export class GameScene extends Phaser.Scene {
     const { states, respawnedPlayerId, forceRemoveFromDeadPlayers } = data;
     
     // Force remove from deadPlayers set if flag is present
-    if (forceRemoveFromDeadPlayers && respawnedPlayerId) {
+        if (forceRemoveFromDeadPlayers && respawnedPlayerId) {
       this.deadPlayers.delete(respawnedPlayerId);
       console.log(`Removed player ${respawnedPlayerId} from deadPlayers set due to force state update`);
     } else if (forceRemoveFromDeadPlayers) {
-      // ëª¨ë  íë ì´ì´ì ëí´ forceRemoveFromDeadPlayersê° trueì¸ ê²½ì°
-      // ë¦¬ì¤í°ë íë ì´ì´ë¤ì deadPlayers ì¸í¸ìì ì ê±°
+      // 모든 플레이어에 대해 forceRemoveFromDeadPlayers가 true인 경우
+      // 리스폰된 플레이어들은 deadPlayers 세트에서 제거
       if (states) {
         states.forEach((state: any) => {
-          // ì²´ë ¥ì´ ìê³  ë¦¬ì¤í° íëê·¸ê° trueì¸ íë ì´ì´ë¤ì deadPlayersìì ì ê±°
+          // 체력이 있고 리스폰 플래그가 true인 플레이어들은 deadPlayers에서 제거
           if (state.health > 0 && (state.isRespawned || state.forceRemoveFromDeadPlayers)) {
             this.deadPlayers.delete(state.account);
           }
@@ -793,6 +764,10 @@ export class GameScene extends Phaser.Scene {
     if (targetId === this.myAccount) {
       console.log(`Local player hit. Current health: ${this.player.health}`);
       this.player.damage(damage);
+      
+      // 로컬 플레이어가 맞았을 때만 카메라 흔들림 효과 적용
+      this.cameras.main.shake(100, 0.01);
+      
       const newHealth = this.player.health;
       console.log(`New health: ${newHealth}`);
       
@@ -899,7 +874,7 @@ export class GameScene extends Phaser.Scene {
       name: this.playerName,
       animation: currentAnimation,
       flipX: this.player.sprite.flipX,
-      // ì£½ì ìíë í¨ê» ì ì¡
+      // 죽은 상태도 함께 전송
       isDead: this.player.isDead()
     };
     
@@ -943,7 +918,7 @@ export class GameScene extends Phaser.Scene {
       if (!this.usedColorIndices.has(i)) {
         this.usedColorIndices.add(i);
         return i;
-            }
+      }
     }
     
     // If all colors are used, generate a deterministic index based on player ID
@@ -1003,9 +978,9 @@ export class GameScene extends Phaser.Scene {
           }
           
           // Health update logic - MODIFIED TO HANDLE RESPAWNS
-          // ì¤ìê° ìí ì ë³´ë¥¼ ë°ì: ëªìì ì¸ isDead íëê·¸ê° ìëì§ íì¸
+          // 서버가 명시적 정보를 받음: 명시적인 isDead 플래그가 왔는지 확인
           if (playerState.isDead) {
-            // ìë²ìì ì£½ì ìíë¼ê³  ë³´ë´ë©´ ë¬´ì¡°ê±´ ì£½ì ìíë¡ ì²ë¦¬
+            // 서버에서 죽은 상태라고 보내면 무조건 죽은 상태로 처리
             player.setHealth(0);
             this.deadPlayers.add(playerId);
           } else if (this.deadPlayers.has(playerId) && !playerState.forceRemoveFromDeadPlayers) {

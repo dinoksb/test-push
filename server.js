@@ -4,7 +4,9 @@ class Server {
       if (await $global.countRoomUsers(roomId) >= 8) throw Error('room is full');
     }
 
-    const joinedRoomId = await $global.joinRoom(roomId || 'battle-arena')
+    // Generate a random room name in the format "Room-{randomNumber}" if no roomId is provided
+    const defaultRoomId = `Room${Math.floor(Math.random() * 10000)}`;
+    const joinedRoomId = await $global.joinRoom(roomId || defaultRoomId);
 
     // Initialize room state if not already set
     const roomState = await $room.getRoomState();
@@ -63,7 +65,13 @@ class Server {
   }
 
   async playerAttack(data) {
-    await $room.broadcastToRoom('playerAttack', data);
+    // 투사체 공격 타입 처리
+    if (data.type === "projectile") {
+      await $room.broadcastToRoom('projectileFired', data);
+    } else {
+      // 이전 방식의 공격 처리 유지 (하위 호환성)
+      await $room.broadcastToRoom('playerAttack', data);
+    }
   }
 
   async playerHit(data) {
@@ -79,7 +87,7 @@ class Server {
     // Update target health
     await $room.updateUserState(targetId, { 
       health: newHealth,
-      // ë§ì½ ì²´ë ¥ì´ 0ì´ë©´ isDead íëê·¸ë¥¼ ì¤ì 
+      // 만약 체력이 0이면 isDead 플래그를 설정
       isDead: newHealth <= 0 
     });
     
@@ -90,7 +98,7 @@ class Server {
       damage,
       newHealth,
       timestamp,
-      // ì²´ë ¥ì´ 0ì´ë©´ íì¤í ì£½ì ìí ì í
+      // 체력이 0이면 플렉스한 죽은 상태 전파
       isDead: newHealth <= 0
     });
     
@@ -152,21 +160,21 @@ class Server {
       flipX: false,
       score: currentState.score || 0,
       lastUpdate: Date.now(),
-      // í´ë¼ì´ì¸í¸ìê² deadPlayers ì¸í¸ìì ì ê±°íëë¡ ì í¸ ë³´ë´ê¸°
+      // 플레이언트에게 deadPlayers 세트에서 제거하라고 신호 보내기
       forceRemoveFromDeadPlayers: true
     };
     
     // Update player state with complete data
     await $room.updateMyState(completePlayerState);
     
-    // ë¦¬ì¤í° ì´ë²¤í¸ì forceRemoveFromDeadPlayers íëê·¸ ì¶ê°
+    // 리스폰 이벤트에 forceRemoveFromDeadPlayers 플래그 추가
     await $room.broadcastToRoom('playerRespawned', {
       playerId: $sender.account,
       forceRemoveFromDeadPlayers: true,
       ...completePlayerState
     });
     
-    // ê°ì  ìí ìë°ì´í¸ìë íëê·¸ ì¶ê°
+    // 강제 상태 업데이트에도 플래그 추가
     const allUserStates = await $room.getAllUserStates();
     await $room.broadcastToRoom('forceStateUpdate', {
       states: allUserStates,
@@ -175,13 +183,13 @@ class Server {
       timestamp: Date.now()
     });
     
-    // ë¦¬ì¤í° ìë¦¼ì ì¤ì¼ì¤ë§
+    // 리스폰 알림도 스케줄링
     this.scheduleRespawnReminders($sender.account, completePlayerState);
   }
   
-  // ë¦¬ì¤í° ìë¦¼ í¨ì (ì¤ë³µ ì ì ì ê±°)
+  // 리스폰 알림 함수 (중복 접속 제거)
   async scheduleRespawnReminders(playerId, playerState) {
-    // ì²« ë²ì§¸ ìë¦¼ (500ms)
+    // 첫 번째 알림 (500ms)
     setTimeout(async () => {
       try {
         await $room.broadcastToRoom('playerRespawnReminder', {
@@ -196,7 +204,7 @@ class Server {
       }
     }, 500);
     
-    // ë ë²ì§¸ ìë¦¼ (1.5s)
+    // 두 번째 알림 (1.5s)
     setTimeout(async () => {
       try {
         await $room.broadcastToRoom('playerRespawnReminder', {
@@ -211,7 +219,7 @@ class Server {
       }
     }, 1500);
     
-    // ì¸ ë²ì§¸ ìë¦¼ (3s)
+    // 세 번째 알림 (3s)
     setTimeout(async () => {
       try {
         await $room.broadcastToRoom('playerRespawnReminder', {
@@ -367,8 +375,7 @@ class Server {
       // Limit maximum number of powerups
       if (powerups.length < 5) {
         // Generate random position
-        const x = Math.floor(Math.random() * 1800) + 100;
-        const y = Math.floor(Math.random() * 1800) + 100;
+        const x = Math.floor(Math.random() * 1800) + 100;        const y = Math.floor(Math.random() * 1800) + 100;
         
         // Create powerup
         const powerup = {
